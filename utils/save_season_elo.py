@@ -1,6 +1,10 @@
 import pandas as pd
-from datetime import timedelta
+import boto3
+import io
 import argparse
+from datetime import timedelta
+import pyarrow.parquet as pq
+import pyarrow as pa
 
 # Constants for Elo computation
 K_FACTOR = 20
@@ -70,34 +74,130 @@ def compute_season_elo(games_df):
 
     return elo_df
 
-def load_game_data(filepath):
-    """Load game data from a Parquet file."""
+def load_game_data_local(filepath):
+    """Load game data from a local Parquet file."""
     return pd.read_parquet(filepath)
 
-def save_elo_to_parquet(elo_df, output_path):
-    """Save Elo ratings DataFrame to a Parquet file."""
-    elo_df.to_parquet(output_path)
+def load_game_data_s3(bucket_name, s3_key):
+    """Load game data from an S3 bucket."""
+    s3 = boto3.client('s3')
+    obj = s3.get_object(Bucket=bucket_name, Key=s3_key)
+    buffer = io.BytesIO(obj['Body'].read())
+    return pd.read_parquet(buffer)
+
+def save_as_parquet_local(df, season, filepath):
+    """
+    Saves the given DataFrame to a local Parquet file.
+    
+    Args:
+    - df: The DataFrame containing Elo ratings.
+    - season: The season for which the Elo ratings are being saved.
+    - filepath: The file path where the Parquet file will be saved.
+    """
+    try:
+        df['SEASON'] = season
+        table = pa.Table.from_pandas(df)
+        pq.write_table(table, filepath)
+        print(f"Data successfully saved locally at {filepath}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to save data locally: {e}")
+
+def save_as_parquet_s3(df, season, bucket_name, s3_key):
+    """
+    Saves the given DataFrame as a Parquet file to an S3 bucket.
+    
+    Args:
+    - df: The DataFrame containing Elo ratings.
+    - season: The season for which the data is being saved.
+    - bucket_name: The S3 bucket where the file will be saved.
+    - s3_key: The S3 key (path) for the file.
+    """
+    try:
+        df['SEASON'] = season
+        table = pa.Table.from_pandas(df)
+
+        buffer = io.BytesIO()
+        pq.write_table(table, buffer)
+
+        s3 = boto3.client('s3')
+        s3.put_object(Bucket=bucket_name, Key=s3_key, Body=buffer.getvalue())
+        print(f"Data successfully uploaded to s3://{bucket_name}/{s3_key}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to upload data to S3: {e}")
+
+def run(season, input_type, input_filepath, output_type, output_filepath=None, bucket_name=None, s3_key=None):
+    """
+    Main function to compute Elo ratings and save them based on the user's choice.
+
+    Args:
+    - season: The NBA season (e.g., '2023-24').
+    - input_type: The input data location type ('local' or 's3').
+    - input_filepath: The input file path (local or S3 key).
+    - output_type: The method to save the data ('local' or 's3').
+    - output_filepath: The local file path for saving Parquet (if local).
+    - bucket_name: The S3 bucket name (if using S3 for saving/loading).
+    - s3_key: The S3 key (path) for saving/loading the Parquet file in S3.
+    """
+    # Load NBA game data
+    if input_type == 'local':
+        nba_data = load_game_data_local(input_filepath)
+    elif input_type == 's3':
+        if not bucket_name or not s3_key:
+            raise ValueError("Bucket name and S3 key must be provided for S3 input.")
+        nba_data = load_game_data_s3(bucket_name, input_filepath)
+    else:
+        raise ValueError("Invalid input type. Choose 'local' or 's3'.")
+
+    # Compute Elo ratings
+    elo_df = compute_season_elo(nba_data)
+
+    # Save based on the type
+    if output_type == 'local':
+        if not output_filepath:
+            raise ValueError("Filepath must be provided for local save.")
+        save_as_parquet_local(elo_df, season, output_filepath)
+    elif output_type == 's3':
+        if not bucket_name or not s3_key:
+            raise ValueError("Bucket name and S3 key must be provided for S3 save.")
+        save_as_parquet_s3(elo_df, season, bucket_name, s3_key)
+    else:
+        raise ValueError("Invalid save type. Choose 'local' or 's3'.")
 
 def parse_arguments():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Compute Elo ratings for an NBA season.")
-    parser.add_argument("--input", required=True, type=str, help="Path to the game data Parquet file.")
-    parser.add_argument("--output", required=True, type=str, help="Path to save the Elo ratings as a Parquet file.")
+    """
+    Parses command line arguments for the Elo computation script.
+    
+    Returns:
+    - Parsed arguments.
+    """
+    parser = argparse.ArgumentParser(description="Compute Elo ratings for an NBA season and save as Parquet.")
+    
+    parser.add_argument("--season", required=True, type=str, help="NBA season to compute Elo ratings for (e.g., '2023-24').")
+    parser.add_argument("--input-type", required=True, choices=['local', 's3'], help="Where to load the Parquet file from: 'local' or 's3'.")
+    parser.add_argument("--input-filepath", required=True, type=str, help="Input file path (local file path or S3 key).")
+    
+    parser.add_argument("--output-type", required=True, choices=['local', 's3'], help="Where to save the Parquet file: 'local' or 's3'.")
+    parser.add_argument("--output-filepath", type=str, help="Output file path for saving Parquet file (required if output type is 'local').")
+    
+    parser.add_argument("--bucket-name", type=str, help="S3 bucket name (required if using S3 for saving/loading).")
+    parser.add_argument("--s3-key", type=str, help="S3 key (path) for saving/loading the Parquet file in S3 (required if input/output type is 's3').")
+    
     return parser.parse_args()
 
 def main():
-    # Parse arguments
+    # Parse command-line arguments
     args = parse_arguments()
 
-    # Load game data
-    games_df = load_game_data(args.input)
-
-    # Compute Elo ratings for the season
-    elo_df = compute_season_elo(games_df)
-
-    # Save Elo ratings to Parquet file
-    save_elo_to_parquet(elo_df, args.output)
-    print(f"Elo ratings saved to {args.output}")
+    # Run the script with the parsed arguments
+    run(
+        season=args.season,
+        input_type=args.input_type,
+        input_filepath=args.input_filepath,
+        output_type=args.output_type,
+        output_filepath=args.output_filepath,
+        bucket_name=args.bucket_name,
+        s3_key=args.s3_key
+    )
 
 if __name__ == "__main__":
     main()
