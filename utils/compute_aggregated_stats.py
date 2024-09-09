@@ -53,31 +53,20 @@ def get_player_stats_top_n_average(player_df, team, game_date, lag, n_players, p
     Compute the player stats for the top 'n_players' by minutes played over the last 'n' games,
     confirming that the players are from the specified team.
     """
-    # Filter the player stats where the specified team is playing at home or away in the matchup
     player_stats = player_df[(player_df['MATCHUP'].str.contains(team)) & (player_df['GAME_DATE'] < game_date)]
     
     if player_stats.empty:
         raise ValueError(f"No player stats found for team {team} before {game_date}")
     
-    # Sort by date to get the last 'n' games (before the given date)
     last_n_games = player_stats.sort_values(by='GAME_DATE', ascending=False)
-
-    # Group by Player_ID and sum minutes played, then pick the top 'n_players'
     top_players = last_n_games.groupby('Player_ID')['MIN'].sum().nlargest(n_players).index.tolist()
-    
-    # Ensure we have exactly 'n_players' by padding with placeholder values if needed
-    while len(top_players) < n_players:
-        top_players.append(f"Player_NA_{len(top_players) + 1}")  # Placeholder Player_ID
 
-    # Filter the data to keep only the stats for the top real players
     top_player_stats = last_n_games[last_n_games['Player_ID'].isin(top_players[:len(last_n_games)])]
 
-    # Use the provided player_mapping to map Player_ID to Player_Name or placeholder names
     player_names = {player_id: player_mapping.get(player_id, f"Player_{player_id}") for player_id in top_players[:len(top_player_stats)]}
 
     avg_player_stats = top_player_stats.groupby('Player_ID')[PLAYER_STATS_COLUMNS[1:]].mean().values.flatten()
 
-    # Pad the stats array if fewer than 'n_players' players
     padding_needed = n_players - len(top_player_stats['Player_ID'].unique())
     if padding_needed > 0:
         avg_player_stats = np.concatenate([avg_player_stats, np.zeros((padding_needed, len(PLAYER_STATS_COLUMNS[1:])))], axis=None)
