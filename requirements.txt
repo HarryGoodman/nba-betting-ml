@@ -1,0 +1,4 @@
+boto3==1.35.14
+nba_api==1.5.2
+pandas==2.2.2
+pyarrow==17.0.0
