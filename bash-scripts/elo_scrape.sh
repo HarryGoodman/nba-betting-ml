@@ -27,7 +27,7 @@ for ((year=$start_year; year<current_year; year++)); do
 
     # Call the Python script to compute Elo ratings
     echo "Computing Elo ratings for season $season..."
-    python utils/save_season_elo.py --input "$input_filepath" --output "$output_filepath"
+    python utils/save_season_elo.py --season "$season" --input-type local --input-filepath "$input_filepath" --output-type local --output-filepath "$output_filepath"
 
     # Check if the Python script ran successfully
     if [ $? -ne 0 ]; then
