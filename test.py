@@ -13,11 +13,13 @@ def load_test_data(test_file_path):
     else:
         raise FileNotFoundError(f"Test file {test_file_path} does not exist.")
 
+
 def prepare_features_and_target(df):
-    df = df.select_dtypes(include=['number'])  
-    X = df.drop(columns=['Win'])  
-    y = df['Win'] 
+    df = df.select_dtypes(include=["number"])
+    X = df.drop(columns=["Win"])
+    y = df["Win"]
     return X, y
+
 
 def evaluate_model(test_file_path, model_path):
     test_data = load_test_data(test_file_path)
@@ -36,10 +38,17 @@ def evaluate_model(test_file_path, model_path):
     accuracy = accuracy_score(y_test, y_pred_binary)
     print(f"Test Accuracy: {accuracy:.4f}")
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate XGBoost model accuracy on a test set.")
-    parser.add_argument('--test-file', required=True, type=str, help="Path to the test parquet file.")
-    parser.add_argument('--model-path', required=True, type=str, help="Path to the saved XGBoost model.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate XGBoost model accuracy on a test set."
+    )
+    parser.add_argument(
+        "--test-file", required=True, type=str, help="Path to the test parquet file."
+    )
+    parser.add_argument(
+        "--model-path", required=True, type=str, help="Path to the saved XGBoost model."
+    )
     args = parser.parse_args()
 
     evaluate_model(test_file_path=args.test_file, model_path=args.model_path)

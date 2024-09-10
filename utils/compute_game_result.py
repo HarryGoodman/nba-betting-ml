@@ -29,7 +29,9 @@ def get_team_win_loss_record(team_df, team, game_date=None):
         team_games = team_games[team_games["GAME_DATE"] <= game_date]
 
     if team_games.empty:
-        raise ValueError(f"No games found for team {team} before or on {game_date or 'the entire season'}")
+        raise ValueError(
+            f"No games found for team {team} before or on {game_date or 'the entire season'}"
+        )
 
     # Get win/loss status for each game and create a boolean column: 1 for Win, 0 for Loss
     win_loss = team_games[["GAME_DATE", "MATCHUP", "WL"]].sort_values(by="GAME_DATE")
