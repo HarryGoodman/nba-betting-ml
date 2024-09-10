@@ -30,7 +30,7 @@ def print_parquet(filepath):
 
     # Print the DataFrame to the console
     print(df)
-    print(df.columns)
+    print(list(df.columns))
 
 
 def parse_arguments():
